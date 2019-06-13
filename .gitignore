@@ -1,0 +1,3 @@
+venv
+*.egg-info
+ringer_config.py
