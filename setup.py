@@ -21,9 +21,11 @@ setup(
     scripts=['ringer/bin/ringer'],
     install_requires=[
         "apng==0.3.3",
+        "boto==2.49.0",
         "opencv-contrib-python==3.4.5.20",
         "opencv-python==3.4.5.20",
         "ring-doorbell==0.2.3",
+        "slacker==0.13.0",
     ],
     author='Craig Rueda',
     author_email='craig@craigrueda.com',
