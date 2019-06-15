@@ -6,6 +6,7 @@ import time
 import uuid
 
 import boto
+import coloredlogs
 import cv2
 import requests
 from PIL import Image
@@ -182,6 +183,14 @@ def upload_to_s3(file, folder, key):
     return f"https://s3.amazonaws.com/{AWS_BUCKET_NAME}/{k.name}"
 
 
+def configure_logger():
+    coloredlogs.DEFAULT_FIELD_STYLES["levelname"] = \
+        dict(color="yellow", bold=coloredlogs.CAN_USE_BOLD_FONT)
+    coloredlogs.install(level="INFO",
+                        fmt="%(asctime)s %(name)-5s [%(levelname)-5s] %(message)s",
+                        )
+
+
 def post_to_slack(msg, subject, full_url, thumb_url):
     slack.chat.post_message(
         SLACK_CHANNEL,
@@ -197,6 +206,8 @@ def post_to_slack(msg, subject, full_url, thumb_url):
 
 
 if __name__ == "__main__":
+    configure_logger()
+    logger.info("Connecting to Ring API...")
     ring = Ring(RING_USERNAME, RING_PASSWORD)
     doorbell = RingDoorBell(ring, "Front Door")
     slack = Slacker(SLACK_API_KEY)
