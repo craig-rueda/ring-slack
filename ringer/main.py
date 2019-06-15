@@ -1,9 +1,11 @@
+from datetime import datetime
 import logging
 import os
 import shutil
 import tempfile
 import time
 import uuid
+from queue import Queue
 
 import boto
 import coloredlogs
@@ -12,24 +14,28 @@ import requests
 from PIL import Image
 from apng import APNG
 from boto.s3.key import Key
-from ring_doorbell import Ring, RingDoorBell
+from ring_doorbell import Ring
 from slacker import Slacker
+from threading import Thread
 
 from .config import (
     AWS_ACCESS_KEY,
     AWS_BUCKET_NAME,
     AWS_SECREY_KEY,
     HIST_POLL_TIMEOUT_SECS,
+    MAX_EVENT_LIFE,
+    MAX_MOTION_CNT,
     RING_PASSWORD,
     RING_USERNAME,
     SLACK_API_KEY,
     SLACK_CHANNEL,
     SLACK_USER,
-    SLACK_USERNAME
+    SLACK_USERNAME,
+    WORKER_SLEEP_SECS
 )
 
-MAX_MOTION_CNT = 10
 logger = logging.getLogger(__name__)
+event_queue = Queue()
 
 
 def gobble_frames(video, frames_to_gobble=5):
@@ -54,7 +60,7 @@ def process_motion(video, temp_dir):
         # Reading frame(image) from video
         frames_remaining, frame = video.read()
         if not frames_remaining:
-            logger.info(f"End of input read {frames_read} of {frame_count} frames")
+            logger.debug(f"End of input read {frames_read} of {frame_count} frames")
             break
 
         frames_read += 1
@@ -114,13 +120,15 @@ def fetch_video(video_url, temp_dir):
     return video_file
 
 
-def handle_video(video_url):
+def handle_video(video_url, event, device):
     temp_dir = tempfile.mkdtemp()
     img_full_dir = os.path.join(temp_dir, "full")
     img_thumb_dir = os.path.join(temp_dir, "thumb")
     result_thumb_png = os.path.join(img_thumb_dir, "result.png")
     os.mkdir(img_full_dir)
     os.mkdir(img_thumb_dir)
+
+    logger.info(f"Processing video for device {device}...")
 
     try:
         video = cv2.VideoCapture(fetch_video(video_url, temp_dir))
@@ -155,7 +163,11 @@ def handle_video(video_url):
         thumb_url = upload_to_s3(result_thumb_png, "thumb", key)  # Thumb version
 
         # Now, post to slack
-        post_to_slack("Something happened", "Movement detected", video_url, thumb_url)
+        post_to_slack(f"Motion detected by *{device.name}* at "
+                      f"*{event['created_at'].ctime()}*",
+                      "Full Video",
+                      video_url,
+                      thumb_url)
 
     except Exception as e:
         logger.exception(e)
@@ -166,11 +178,11 @@ def handle_video(video_url):
 
 def get_latest_recording(doorbell):
     history = doorbell.history(limit=1)
-    last_id = 0
+    last_hist = {"id": 0}
     if history:
-        last_id = history[0]["id"]
+        last_hist = history[0]
 
-    return last_id
+    return last_hist
 
 
 def upload_to_s3(file, folder, key):
@@ -205,23 +217,85 @@ def post_to_slack(msg, subject, full_url, thumb_url):
     )
 
 
-if __name__ == "__main__":
+def enqueue_event(event, device):
+    event_queue.put({"device": device, "event": event, "added_at": datetime.now()})
+
+
+def worker_loop():
+    while True:
+        event_dict = event_queue.get()
+        added_at = event_dict["added_at"]
+        device = event_dict["device"]
+        event = event_dict["event"]
+        event_id = event["id"]
+
+        logger.info(f"Handling event {event_dict}...")
+
+        if added_at + MAX_EVENT_LIFE <= datetime.now():
+            # Just drop this event on the floor
+            logger.warning(f"Event {event_dict} expired in the queue - dropping...")
+            continue
+
+        # At this point, we have a somewhat legit event, so let's try to process it
+        try:
+            recording_url = device.recording_url(event_id)
+            if not recording_url:
+                logger.info(f"Recording not ready for event {event_dict}")
+                # Don't forget to re-enqueue
+                event_queue.put(event_dict)
+            else:
+                handle_video(recording_url, event, device)
+
+        except Exception as e:
+            logger.exception(e)
+
+        # Finally, take a rest...
+        time.sleep(WORKER_SLEEP_SECS)
+
+
+def main():
     configure_logger()
-    logger.info("Connecting to Ring API...")
-    ring = Ring(RING_USERNAME, RING_PASSWORD)
-    doorbell = RingDoorBell(ring, "Front Door")
+
+    global slack
     slack = Slacker(SLACK_API_KEY)
 
-    latest_id = get_latest_recording(doorbell)
+    global worker_thread
+    worker_thread = Thread(target=worker_loop, name="Worker Thread")
+    worker_thread.daemon = True
+    worker_thread.start()
+
+    logger.info("Connecting to Ring API")
+    ring = Ring(RING_USERNAME, RING_PASSWORD)
+    logger.info("Connected to Ring API")
+
+    devices = ring.devices
+    logger.info(f"Found devices {devices}")
+
+    video_devices = devices["doorbells"] + devices["stickup_cams"]
+    logger.info(f"Watching for events on devices {video_devices}")
+
+    # Init event ids
+    for device in video_devices:
+        device.latest_id = get_latest_recording(device)["id"]
+        logger.info(f"Found latest event id {device.latest_id} for device {device}")
 
     # Loop for ever, checking to see if a new video becomes available
     try:
         while True:
             time.sleep(HIST_POLL_TIMEOUT_SECS)
-            new_id = get_latest_recording(doorbell)
 
-            if new_id != latest_id:
-                latest_id = new_id
-                handle_video(doorbell.recording_url(latest_id))
+            for device in video_devices:
+                event = get_latest_recording(device)
+                new_id = event["id"]
+
+                if new_id != device.latest_id:
+                    logger.info(f"Detected a new event for device {device}")
+                    device.latest_id = new_id
+                    enqueue_event(event, device)
+
     except KeyboardInterrupt:
         pass
+
+
+if __name__ == "__main__":
+    main()
