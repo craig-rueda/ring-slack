@@ -25,5 +25,6 @@ WORKER_SLEEP_SECS = 5
 try:
     from ringer_config import *  # noqa
     import ringer_config
+    logger.info("Loaded external ringer_config")
 except ImportError:
     logger.info("Using default config")
