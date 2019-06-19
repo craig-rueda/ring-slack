@@ -60,7 +60,7 @@ def process_motion(video, temp_dir):
         # Reading frame(image) from video
         frames_remaining, frame = video.read()
         if not frames_remaining:
-            logger.debug(f"End of input read {frames_read} of {frame_count} frames")
+            logger.debug("End of input read {} of {} frames", frames_read, frame_count)
             break
 
         frames_read += 1
@@ -103,7 +103,7 @@ def process_motion(video, temp_dir):
             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 3)
 
         if found_motion:
-            img_location = os.path.join(temp_dir, f"{motion_count:03}.png")
+            img_location = os.path.join(temp_dir, "{0:03d}.png".format(motion_count))
             cv2.imwrite(img_location, frame)
             motion_count += 1
 
@@ -128,7 +128,7 @@ def handle_video(video_url, event, device):
     os.mkdir(img_full_dir)
     os.mkdir(img_thumb_dir)
 
-    logger.info(f"Processing video for device {device}...")
+    logger.info("Processing video for device {}...".format(device))
 
     try:
         video = cv2.VideoCapture(fetch_video(video_url, temp_dir))
@@ -143,7 +143,7 @@ def handle_video(video_url, event, device):
                             os.listdir(img_full_dir)]
         image_full_files.sort()
         if not image_full_files:
-            logger.warning(f"Found no motion in video {video_url}...")
+            logger.warning("Found no motion in video {}...".format(video_url))
             return
 
         # Now, resize the captured frames
@@ -163,8 +163,8 @@ def handle_video(video_url, event, device):
         thumb_url = upload_to_s3(result_thumb_png, "thumb", key)  # Thumb version
 
         # Now, post to slack
-        post_to_slack(f"Motion detected by *{device.name}* at "
-                      f"*{event['created_at'].ctime()}*",
+        post_to_slack("Motion detected by *{}* at *{}*".format(
+            device.name, event['created_at'].ctime()),
                       "Full Video",
                       video_url,
                       thumb_url)
@@ -190,9 +190,9 @@ def upload_to_s3(file, folder, key):
     bucket = conn.get_bucket(AWS_BUCKET_NAME)
     k = Key(bucket)
     k.storage_class = "STANDARD_IA"
-    k.key = f"{folder}/{key}"
+    k.key = "{}/{}".format(folder, key)
     k.set_contents_from_filename(file, headers={'Content-Type': 'image/png'})
-    return f"https://s3.amazonaws.com/{AWS_BUCKET_NAME}/{k.name}"
+    return "https://s3.amazonaws.com/{}/{}".format(AWS_BUCKET_NAME, k.name)
 
 
 def configure_logger():
@@ -229,18 +229,19 @@ def worker_loop():
         event = event_dict["event"]
         event_id = event["id"]
 
-        logger.info(f"Handling event {event_dict}...")
+        logger.info("Handling event {}...".format(event_dict))
 
         if added_at + MAX_EVENT_LIFE <= datetime.now():
             # Just drop this event on the floor
-            logger.warning(f"Event {event_dict} expired in the queue - dropping...")
+            logger.warning(
+                "Event {} expired in the queue - dropping...".format(event_dict))
             continue
 
         # At this point, we have a somewhat legit event, so let's try to process it
         try:
             recording_url = device.recording_url(event_id)
             if not recording_url:
-                logger.info(f"Recording not ready for event {event_dict}")
+                logger.info("Recording not ready for event {}".format(event_dict))
                 # Don't forget to re-enqueue
                 event_queue.put(event_dict)
             else:
@@ -269,15 +270,16 @@ def main():
     logger.info("Connected to Ring API")
 
     devices = ring.devices
-    logger.info(f"Found devices {devices}")
+    logger.info("Found devices {}".format(devices))
 
     video_devices = devices["doorbells"] + devices["stickup_cams"]
-    logger.info(f"Watching for events on devices {video_devices}")
+    logger.info("Watching for events on devices {}".format(video_devices))
 
     # Init event ids
     for device in video_devices:
         device.latest_id = get_latest_recording(device)["id"]
-        logger.info(f"Found latest event id {device.latest_id} for device {device}")
+        logger.info("Found latest event id {} for device {}".format(
+            device.latest_id, device))
 
     # Loop for ever, checking to see if a new video becomes available
     try:
@@ -289,7 +291,7 @@ def main():
                 new_id = event["id"]
 
                 if new_id != device.latest_id:
-                    logger.info(f"Detected a new event for device {device}")
+                    logger.info("Detected a new event for device {}".format(device))
                     device.latest_id = new_id
                     enqueue_event(event, device)
 
