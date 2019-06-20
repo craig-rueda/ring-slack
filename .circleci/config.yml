@@ -27,18 +27,18 @@ jobs:
                 --label "git.url=${CIRCLE_REPOSITORY_URL}" \
                 .
 
-            # Build the x86 version...
-            docker build \
-                -t "${DOCKER_REPO}:arm32v7" \
-                --build-arg BASE_REPO=arm32v7 \
-                --label "ci.triggered_by=${CIRCLE_USERNAME}" \
-                --label "ci.build_date=$(date)" \
-                --label "ci.build_num=${CIRCLE_BUILD_NUM}" \
-                --label "ci.build_url=${CIRCLE_BUILD_URL}" \
-                --label "git.branch=${CIRCLE_BRANCH}" \
-                --label "git.sha=${CIRCLE_SHA1}" \
-                --label "git.url=${CIRCLE_REPOSITORY_URL}" \
-                .
+#            # Build the ARM version...
+#            docker build \
+#                -t "${DOCKER_REPO}:arm32v7" \
+#                --build-arg BASE_REPO=arm32v7 \
+#                --label "ci.triggered_by=${CIRCLE_USERNAME}" \
+#                --label "ci.build_date=$(date)" \
+#                --label "ci.build_num=${CIRCLE_BUILD_NUM}" \
+#                --label "ci.build_url=${CIRCLE_BUILD_URL}" \
+#                --label "git.branch=${CIRCLE_BRANCH}" \
+#                --label "git.sha=${CIRCLE_SHA1}" \
+#                --label "git.url=${CIRCLE_REPOSITORY_URL}" \
+#                .
       - run:
           name: "Push image"
           command: |
