@@ -8,7 +8,7 @@ COPY ringer /app/ringer
 COPY setup.py README.md MANIFEST.in /app/
 COPY docker/pip.conf /etc/
 
-RUN apt-get update && apt-get install -y libatlas3-base webp \
+RUN apt-get update && apt-get install -y python-opencv libgtk-3-dev \
     && pip install . \
     && mkdir -p $PYTHONPATH \
     && rm -rf /var/lib/apt/lists/*
