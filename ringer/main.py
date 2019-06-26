@@ -1,11 +1,12 @@
-from datetime import datetime
 import logging
 import os
 import shutil
 import tempfile
 import time
 import uuid
+from datetime import datetime, timezone
 from queue import Queue
+from threading import Thread
 
 import boto
 import coloredlogs
@@ -16,7 +17,6 @@ from apng import APNG
 from boto.s3.key import Key
 from ring_doorbell import Ring
 from slacker import Slacker
-from threading import Thread
 
 from .config import (
     AWS_ACCESS_KEY,
@@ -163,8 +163,9 @@ def handle_video(video_url, event, device):
         thumb_url = upload_to_s3(result_thumb_png, "thumb", key)  # Thumb version
 
         # Now, post to slack
+        created_at_local = utc_to_local(event['created_at'])
         post_to_slack("Motion detected by *{}* at *{}*".format(
-            device.name, event['created_at'].ctime()),
+            device.name, created_at_local.ctime()),
                       "Full Video",
                       video_url,
                       thumb_url)
@@ -219,6 +220,10 @@ def post_to_slack(msg, subject, full_url, thumb_url):
 
 def enqueue_event(event, device):
     event_queue.put({"device": device, "event": event, "added_at": datetime.now()})
+
+
+def utc_to_local(utc_dt):
+    return utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
 
 
 def worker_loop():
