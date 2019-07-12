@@ -1,8 +1,12 @@
 import logging
 import os
 import shutil
+import signal
+import sys
 import tempfile
+import threading
 import time
+import traceback
 import uuid
 from datetime import datetime, timezone
 from queue import Queue
@@ -261,6 +265,7 @@ def worker_loop():
 
 def main():
     configure_logger()
+    register_stack_dump()
 
     global slack
     slack = Slacker(SLACK_API_KEY)
@@ -301,7 +306,23 @@ def main():
                     enqueue_event(event, device)
 
     except KeyboardInterrupt:
-        pass
+        exit(0)
+
+
+def dump_stack(sig, frame):
+    id2name = dict([(th.ident, th.name) for th in threading.enumerate()])
+    code = []
+    for threadId, stack in sys._current_frames().items():
+        code.append("\n# Thread: %s(%d)" % (id2name.get(threadId,""), threadId))
+        for filename, lineno, name, line in traceback.extract_stack(stack):
+            code.append('File: "%s", line %d, in %s' % (filename, lineno, name))
+            if line:
+                code.append("  %s" % (line.strip()))
+    logger.error("Stack Dump:\n{}".format("\n".join(code)))
+
+
+def register_stack_dump():
+    signal.signal(signal.SIGUSR1, dump_stack)  # Register handler
 
 
 if __name__ == "__main__":
