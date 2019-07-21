@@ -21,7 +21,7 @@ setup(
     scripts=['ringer/bin/ringer'],
     install_requires=[
         "apng==0.3.3",
-        "boto==2.49.0",
+        "boto3==1.9.191",
         "coloredlogs>=10.0",
         "opencv-python-headless==3.4.4.19",
         "Pillow==6.0.0",

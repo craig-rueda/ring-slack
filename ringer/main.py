@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from queue import Queue
 from threading import Thread
 
-import boto
+import boto3
 import coloredlogs
 import cv2
 import requests
@@ -135,7 +135,8 @@ def handle_video(video_url, event, device):
     logger.info("Processing video for device {}...".format(device))
 
     try:
-        video = cv2.VideoCapture(fetch_video(video_url, temp_dir))
+        video_file = fetch_video(video_url, temp_dir)
+        video = cv2.VideoCapture(video_file)
     except Exception as e:
         logger.exception(e)
         return
@@ -164,7 +165,8 @@ def handle_video(video_url, event, device):
 
         # Upload to S3
         key = uuid.uuid4().hex
-        thumb_url = upload_to_s3(result_thumb_png, "thumb", key)  # Thumb version
+        thumb_url = upload_thumb_to_s3(result_thumb_png, "thumb", key, "image/png")
+        video_url = upload_thumb_to_s3(video_file, "vid", key, "video/mp4")
 
         # Now, post to slack
         created_at_local = utc_to_local(event['created_at'])
@@ -190,14 +192,19 @@ def get_latest_recording(doorbell):
     return last_hist
 
 
-def upload_to_s3(file, folder, key):
-    conn = boto.connect_s3(AWS_ACCESS_KEY, AWS_SECREY_KEY)
-    bucket = conn.get_bucket(AWS_BUCKET_NAME)
-    k = Key(bucket)
-    k.storage_class = "STANDARD_IA"
-    k.key = "{}/{}".format(folder, key)
-    k.set_contents_from_filename(file, headers={'Content-Type': 'image/png'})
-    return "https://s3.amazonaws.com/{}/{}".format(AWS_BUCKET_NAME, k.name)
+def upload_thumb_to_s3(file, folder, key, content_type):
+    full_key = "{}/{}".format(folder, key)
+    s3_client.upload_file(
+        file,
+        AWS_BUCKET_NAME,
+        full_key,
+        ExtraArgs={
+            "ContentType": content_type,
+            "StorageClass": "REDUCED_REDUNDANCY",
+        }
+    )
+
+    return "https://s3.amazonaws.com/{}/{}".format(AWS_BUCKET_NAME, full_key)
 
 
 def configure_logger():
@@ -274,6 +281,13 @@ def main():
     worker_thread = Thread(target=worker_loop, name="Worker Thread")
     worker_thread.daemon = True
     worker_thread.start()
+
+    global s3_client
+    s3_client = boto3.client(
+        's3',
+        aws_access_key_id=AWS_ACCESS_KEY,
+        aws_secret_access_key=AWS_SECREY_KEY,
+    )
 
     logger.info("Connecting to Ring API")
     ring = Ring(RING_USERNAME, RING_PASSWORD)
