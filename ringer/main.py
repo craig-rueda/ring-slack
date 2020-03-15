@@ -21,6 +21,7 @@ import requests
 from PIL import Image
 from apng import APNG
 from oauthlib.oauth2 import MissingTokenError
+from requests import HTTPError
 from ring_doorbell import Ring, Auth
 from slacker import Slacker
 
@@ -274,6 +275,13 @@ def worker_loop():
             else:
                 handle_video(recording_url, event, device)
 
+        except HTTPError as e:
+            if e.response.status == 404:
+                logger.info("Recording not ready for event {}".format(event_dict))
+                # Don't forget to re-enqueue
+                event_queue.put(event_dict)
+            else:
+                logger.exception(e)
         except Exception as e:
             logger.exception(e)
 
