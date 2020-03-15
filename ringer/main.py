@@ -42,7 +42,7 @@ from .config import (
 
 logger = logging.getLogger(__name__)
 event_queue = Queue()
-cache_file = Path(f"{Path.home().absolute()}/.ringer_token.cache")
+cache_file = Path("{}/.ringer_token.cache".format(Path.home().absolute()))
 
 
 def token_updated(token):
