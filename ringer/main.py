@@ -9,6 +9,8 @@ import time
 import traceback
 import uuid
 from datetime import datetime, timezone
+from json import dumps, loads
+from pathlib import Path
 from queue import Queue
 from threading import Thread
 
@@ -18,8 +20,8 @@ import cv2
 import requests
 from PIL import Image
 from apng import APNG
-from boto.s3.key import Key
-from ring_doorbell import Ring
+from oauthlib.oauth2 import MissingTokenError
+from ring_doorbell import Ring, Auth
 from slacker import Slacker
 
 from .config import (
@@ -40,6 +42,15 @@ from .config import (
 
 logger = logging.getLogger(__name__)
 event_queue = Queue()
+cache_file = Path(f"{Path.home().absolute()}/.ringer_token.cache")
+
+
+def token_updated(token):
+    cache_file.write_text(dumps(token))
+
+
+def otp_callback():
+    return input("2FA code: ")
 
 
 def gobble_frames(video, frames_to_gobble=5):
@@ -290,13 +301,25 @@ def main():
     )
 
     logger.info("Connecting to Ring API")
-    ring = Ring(RING_USERNAME, RING_PASSWORD)
+    if cache_file.is_file():
+        auth = Auth("MyProject/1.0", loads(cache_file.read_text()), token_updated)
+    else:
+        username = RING_USERNAME
+        password = RING_PASSWORD
+        auth = Auth("MyProject/1.0", None, token_updated)
+        try:
+            auth.fetch_token(username, password)
+        except MissingTokenError:
+            auth.fetch_token(username, password, otp_callback())
+
+    ring = Ring(auth)
+    ring.update_data()
     logger.info("Connected to Ring API")
 
-    devices = ring.devices
+    devices = ring.devices()
     logger.info("Found devices {}".format(devices))
 
-    video_devices = devices["doorbells"] + devices["stickup_cams"]
+    video_devices = devices["doorbots"] + devices["stickup_cams"]
     logger.info("Watching for events on devices {}".format(video_devices))
 
     # Init event ids
