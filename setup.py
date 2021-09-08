@@ -24,7 +24,7 @@ setup(
         "boto3==1.9.191",
         "coloredlogs>=10.0,<11",
         "opencv-python-headless==3.4.4.19",
-        "Pillow==6.0.0",
+        "Pillow==8.3.2",
         "ring-doorbell==0.6.0",
         "slacker==0.13.0",
     ],
