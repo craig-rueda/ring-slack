@@ -23,7 +23,7 @@ setup(
         "apng==0.3.3",
         "boto3==1.9.191",
         "coloredlogs>=10.0,<11",
-        "opencv-python-headless==3.4.4.19",
+        "opencv-python-headless==4.2.0.32",
         "Pillow==6.0.0",
         "ring-doorbell==0.6.0",
         "slacker==0.13.0",
