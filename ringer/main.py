@@ -215,7 +215,9 @@ def process_faces(video) -> set[str]:
         faces = face_classifier.detectMultiScale(gray_image, 1.1, 5, minSize=(40, 40))
 
         for x, y, w, h in faces:
-            serial, confidence = face_recognizer.predict(gray_image[y : y + h, x : x + w])
+            serial, confidence = face_recognizer.predict(
+                gray_image[y : y + h, x : x + w]
+            )
 
             if confidence > 50:
                 found_faces.add(face_training_data_manifest["data"][serial]["name"])
