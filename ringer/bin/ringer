@@ -1,5 +1,0 @@
-#!/usr/bin/env python
-from ringer.cli import ringer
-
-if __name__ == '__main__':
-    ringer()

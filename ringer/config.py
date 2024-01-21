@@ -5,7 +5,8 @@ logger = logging.getLogger(__name__)
 
 AWS_ACCESS_KEY = "your_iam_key"
 AWS_SECREY_KEY = "your_secret_key"
-AWS_BUCKET_NAME = "your_bucket"
+AWS_TRAINING_BUCKET_NAME = "your_bucket"
+AWS_TRAINING_BUCKET_PREFIX = "training_data"
 
 HIST_POLL_TIMEOUT_SECS = 5
 
@@ -25,6 +26,7 @@ WORKER_SLEEP_SECS = 5
 try:
     from ringer_config import *  # noqa
     import ringer_config
+
     logger.info("Loaded external ringer_config")
 except ImportError:
     logger.info("Using default config")
